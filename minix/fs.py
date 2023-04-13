@@ -201,6 +201,8 @@ class MinixINode:
         return blks
 
     def read_data(self):
+        if self.raw_inode.size == 0:
+            return None
         blk_size = self.fs.blk_dev.blk_size
         zones = self.enum_data_zones()
         data = bytearray()
@@ -218,7 +220,7 @@ class MinixINode:
         return (self.raw_inode.mode & MINIX_S_IFMT) == MINIX_S_IFDIR
 
     def is_file(self):
-        return (self.raw_inode.mode & MINIX_S_IFMT) == 0
+        return (self.raw_inode.mode & MINIX_S_IFMT) == MINIX_S_IFREG
 
     def is_special(self):
         return (self.raw_inode.mode & MINIX_S_IFMT) != MINIX_S_IFREG
@@ -238,16 +240,20 @@ class MinixINode:
             result[name] = ino
         return result
 
-    def walk(self, path="", with_dir=True, with_special=False):
+    def walk(self, path=None, with_dir=True, with_special=False):
+        if not path:
+            path = []
         entries = self.read_dir()
         for name, ino in entries.items():
+            sub_path = list(path)
+            sub_path.append(name)
             if ino.is_dir():
                 if name not in (".", ".."):
                     # add dir itself
                     if with_dir:
-                        yield path, name, ino
+                        yield sub_path, ino
                     # add entries
-                    yield from ino.walk(path + name + "/")
+                    yield from ino.walk(sub_path, with_dir, with_special)
                 else:
                     continue
             else:
@@ -255,7 +261,7 @@ class MinixINode:
                 if ino.is_special() and not with_special:
                     continue
                 # yield non dir
-                yield path, name, ino
+                yield sub_path, ino
 
 
 class MinixFS:

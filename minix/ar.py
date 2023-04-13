@@ -46,9 +46,12 @@ class MinixArchiveEntry:
 
 
 class MinixArchive:
-    def __init__(self, name):
+    def __init__(self, name=None, fobj=None):
         self.name = name
-        self.fobj = open(name, "rb")
+        if fobj:
+            self.fobj = fobj
+        else:
+            self.fobj = open(name, "rb")
         self._check_magic()
 
     def close(self):
