@@ -234,7 +234,8 @@ class MinixINode:
         result = {}
         for i in range(entries):
             inode, name = struct.unpack_from(">H14s", data, off)
-            name = name.rstrip(b"\x00").decode("ascii")
+            encoding = self.fs.encoding
+            name = name.rstrip(b"\x00").decode(encoding)
             off += MINIX_V1_DIR_ENTRY_SIZE
             ino = self.fs.get_inode(inode)
             result[name] = ino
@@ -265,9 +266,10 @@ class MinixINode:
 
 
 class MinixFS:
-    def __init__(self, blk_dev, big_endian=True):
+    def __init__(self, blk_dev, big_endian=True, encoding="latin-1"):
         self.blk_dev = blk_dev
         self.big_endian = big_endian
+        self.encoding = encoding
         if big_endian:
             self.endian_tag = ">"
         else:
@@ -282,7 +284,9 @@ class MinixFS:
         data = self.blk_dev.read_block(MINIX_SUPER_BLK)
         fields = struct.unpack_from(self.endian_tag + "HHHHHHIHHI", data, 0)
         super_blk = super_type(*fields)
-        assert super_blk.magic == MINIX_SUPER_MAGIC
+        magic = super_blk.magic
+        if magic != MINIX_SUPER_MAGIC:
+            raise ValueError(f"Invalid Superblock Magic: {magic:04x}")
         #   assert super_blk.state == MINIX_VALID_FS
         return super_blk
 
@@ -306,13 +310,17 @@ class MinixFS:
         blk_off = MINIX_SUPER_BLK + 1
         blk_off += self.super_blk.imap_blocks
         blk_off += self.super_blk.zmap_blocks
-        blk_num = (self.super_blk.ninode + 1) // MINIX_V1_INODE_PER_BLOCK
+        blk_num = (
+            self.super_blk.ninode + MINIX_V1_INODE_PER_BLOCK - 1
+        ) // MINIX_V1_INODE_PER_BLOCK
         # check first data zone
         first_data_zone = blk_off + blk_num
         assert self.super_blk.firstdatazone == first_data_zone
         return self.blk_dev.read_block(blk_off, blk_num)
 
     def _read_inode(self, num):
+        if num >= self.super_blk.ninode:
+            raise ValueError(f"invalid inode num {num}")
         off = (num - 1) * MINIX_V1_INODE_SIZE
         data = self.inodes[off : off + MINIX_V1_INODE_SIZE]
         fields = struct.unpack(self.endian_tag + "HHIIBBHHHHHHHHH", data)
