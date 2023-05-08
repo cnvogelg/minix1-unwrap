@@ -234,6 +234,8 @@ class MinixINode:
         result = {}
         for i in range(entries):
             inode, name = struct.unpack_from(">H14s", data, off)
+            if inode == 0:
+                continue
             encoding = self.fs.encoding
             name = name.rstrip(b"\x00").decode(encoding)
             off += MINIX_V1_DIR_ENTRY_SIZE
@@ -279,6 +281,7 @@ class MinixFS:
         self.zmap = self._read_zmap()
         self.inodes = self._read_inodes()
         self.root_inode = self.get_inode(MINIX_ROOT_INODE)
+        # assert num_blks == self.super_blk.nzones
 
     def _read_super_block(self):
         data = self.blk_dev.read_block(MINIX_SUPER_BLK)
